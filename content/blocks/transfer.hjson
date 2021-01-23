@@ -1,0 +1,18 @@
+size: 3
+category: effect
+requirements:[
+  lead/200
+  thorium/200
+]
+consumes:{
+  power: 1
+}
+hasItems: true
+targetable: false
+update: true
+health: 500
+configurable: true
+rebuildable: false
+placeableLiquid: true 
+floating: true
+expanded: true

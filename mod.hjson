@@ -1,0 +1,5 @@
+name: Передатчик предметов
+author:"[#f364e9]Qwaka"
+description: Передает предметы
+version: 1
+minGameVersion: 105
