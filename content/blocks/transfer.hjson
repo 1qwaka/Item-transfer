@@ -1,8 +1,9 @@
 size: 3
 category: effect
 requirements:[
-  lead/200
-  thorium/200
+  lead/50
+  copper/50
+  graphite/30
 ]
 consumes:{
   power: 1
@@ -10,7 +11,7 @@ consumes:{
 hasItems: true
 targetable: false
 update: true
-health: 500
+health: 600
 configurable: true
 rebuildable: false
 placeableLiquid: true 

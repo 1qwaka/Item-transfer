@@ -1,5 +1,6 @@
-name: Передатчик предметов
-author:"[#f364e9]Qwaka"
-description: Передает предметы
+name: item-transfer
+displayName: Item Transfer
+author:"code: [#f364e9]Qwaka\nsprites: [#00FA9A]Gori[#66CDAA]lla [#7FFFD4]Glue"
+description: Adds an Item Transfer that allows you to exchange items with another teams
 version: 1
-minGameVersion: 105
+minGameVersion: 120
