@@ -2,48 +2,28 @@ var scrollPos = 0
 //дальность передачи
 var range = 240;
 //скорость передачи предметов/секунду
-var speed = 10;
+var speed = 12;
 var sendTime = 60 / speed;
 
-function quad(region, x1, y1, c1, x2, y2, c2, x3, y3, c3, x4, y4, c4) {
-  //var mcolor = Draw.getMixColor().toFloatBits();
-  var u = region.u;
-  var v = region.v;
-  var vertices = []
+function gradientLine(x, y, x2, y2, c1, c2, stroke) {
 
-  //var c = Draw.getColor().toFloatBits()
-  var c = Color.valueOf("ffffff").toFloatBits()
+  var hstroke = stroke / 2;
+  var len = Mathf.len(x2 - x, y2 - y);
+  var diffx = (x2 - x) / len * hstroke;
+  var diffy = (y2 - y) / len * hstroke;
 
-  vertices[0] = x1;
-  vertices[1] = y1;
-  vertices[2] = c;
-  vertices[3] = u;
-  vertices[4] = v;
-  vertices[5] = c1;
+  Fill.quad(
+    x - diffy, y + diffx,
+    c1.toFloatBits(),
+    x + diffy, y - diffx,
+    c1.toFloatBits(),
+    x2 + diffy, y2 - diffx,
+    c2.toFloatBits(),
+    x2 - diffy, y2 + diffx,
+    c2.toFloatBits()
+  );
 
-  vertices[6] = x2;
-  vertices[7] = y2;
-  vertices[8] = c;
-  vertices[9] = u;
-  vertices[10] = v;
-  vertices[11] = c2;
-
-  vertices[12] = x3;
-  vertices[13] = y3;
-  vertices[14] = c;
-  vertices[15] = u;
-  vertices[16] = v;
-  vertices[17] = c3;
-
-  vertices[18] = x4;
-  vertices[19] = y4;
-  vertices[20] = c;
-  vertices[21] = u;
-  vertices[22] = v;
-  vertices[23] = c4;
-
-  Draw.vert(region.texture, vertices, 0, vertices.length);
-};
+}
 
 const int = (i) => new Packages.java.lang.Integer(i);
 
@@ -54,8 +34,9 @@ const transferEffect = new Effect(25, 800, cons(e => {
   var x = Mathf.lerp(e.x, e.data[1].x, e.fin());
   var y = Mathf.lerp(e.y, e.data[1].y, e.fin());
 
-  Draw.color(e.color);
+  Draw.color(e.color, e.data[1].team.color, e.fin());
   Draw.rect(Core.atlas.find(transfer.name + "-arrow"), x, y, e.rotation)
+  Draw.color();
   Draw.rect(e.data[0], x, y);
 
 }));
@@ -75,7 +56,7 @@ const transfer = extend(Block, "transfer", {
 
   setStats() {
     this.super$setStats();
-    this.stats.add(Stat.range, +(range/8).toFixed(1), StatUnit.blocks);
+    this.stats.add(Stat.range, +(range / 8).toFixed(1), StatUnit.blocks);
     this.stats.add(Stat.itemsMoved, speed, StatUnit.itemsSecond);
   }
 
@@ -107,6 +88,76 @@ transfer.buildType = () => extend(Building, {
   _links: new Seq(),
   acceptableItems: new Seq(),
   _index: 0,
+  _buffer: {
+    items: new Seq(),
+    accept(angle,destination, item, amount) {
+      this.items.add({
+        item: item,
+        x: destination.x,
+        y: destination.y,
+        color: destination.team.color,
+        amount: amount,
+        progress: 0,
+        rotation: angle
+      })
+    },
+    draw(build) {
+      this.items.each(cons(i => {
+
+        var x = Mathf.lerp(build.x, i.x, i.progress);
+        var y = Mathf.lerp(build.y, i.y, i.progress);
+
+        Draw.color(build.team.color, i.color, i.progress);
+        Draw.rect(Core.atlas.find(transfer.name + "-arrow"), x, y, i.rotation)
+        Draw.color();
+        Draw.rect(i.item.icon(Cicon.medium), x, y);
+
+      }))
+    },
+    update(build) {
+      this.items.each(cons(i=>{
+        i.progress+=1/25*Time.delta
+        if (i.progress >= 1){
+          build = Vars.world.buildWorld(i.x,i.y);
+          if(build != null) build.handleItemB(i.item, i.amount);
+          this.items.remove(i,true)
+        } 
+      }))
+    },
+    read(r) {
+      var size = r.i();
+      for(var i = 0;i<size;i++){
+        var item = Vars.content.getByName(ContentType.item,r.str());
+        var x = r.i();
+        var y = r.i();
+        var color = Color.valueOf(r.str());
+        var amount = r.i();
+        var progress = r.i();
+        var rotation = r.i();
+        this.items.add({
+          item: item,
+          x: x,
+          y:y,
+          color:color,
+          amount: amount,
+          progress: progress,
+          rotation: rotation
+        })
+      }
+    },
+    write(w) {
+      w.i(this.items.size);
+      this.items.each(cons(i=>{
+        w.str(i.item.name);
+        w.i(i.x);
+        w.i(i.y);
+        w.str(i.color.toString());
+        w.i(i.amount);
+        w.i(i.progress);
+        w.i(i.rotation);
+      }))
+    }
+  },
 
   getSend() {
     return this._send;
@@ -144,77 +195,53 @@ transfer.buildType = () => extend(Building, {
     var z = Draw.z();
     Draw.z(Layer.power);
     this.drawBridge();
+    //this._buffer.draw(this)
     this.drawAcceptableItems();
     Draw.reset();
     Draw.z(z);
   },
 
   drawBridge() {
-    
+
     var vec = new Vec2();
     for (var i = 0; i < this._links.size; i++) {
       var build = Vars.world.build(this._links.get(i));
       if (build == null) continue;
-      Lines.stroke(12.0);
-      //Draw.alpha(0.8);
+      var angle = Angles.angle(this.x, this.y, build.x, build.y);
       Draw.color(this.team.color);
-      Draw.rect(Core.atlas.find(this.block.name + "-end"), this.x, this.y, Angles.angle(this.x, this.y, build.x, build.y) + 90);
-      //Draw.color(build.team.color);
-      Draw.rect(Core.atlas.find(this.block.name + "-end"), build.x, build.y, Angles.angle(this.x, this.y, build.x, build.y) - 90);
+      Draw.rect(Core.atlas.find(this.block.name + "-end"), this.x, this.y, angle + 90);
+      Draw.color(build.team.color);
+      Draw.rect(Core.atlas.find(this.block.name + "-end"), build.x, build.y, angle - 90);
 
-
-      var x = this.x;
-      var y = this.y;
-      var x2 = build.x;
-      var y2 = build.y;
-
-      Lines.line(Core.atlas.find(this.block.name + "-bridge"),x,y,x2,y2,false)
-
-      // var hstroke = 12 / 2;
-      // var len = Mathf.len(x2 - x, y2 - y);
-      // var diffx = (x2 - x) / len * hstroke;
-      // var diffy = (y2 - y) / len * hstroke;
-
-      // Draw.color(Color.white)
-
-      // Fill.quad(
-      //   Core.atlas.find(this.block.name + "-bridge"),
-      //   x - diffy, y + diffx,
-      //   x + diffy, y - diffx,
-      //   x2 + diffy, y2 - diffx,
-      //   x2 - diffy, y2 + diffx
-      // );
-
-      // quad(
-      //   Core.atlas.white(),
-      //   x - diffy, y + diffx,
-      //   this.team.color.toFloatBits(),
-      //   x + diffy, y - diffx,
-      //   this.team.color.toFloatBits(),
-      //   x2 + diffy, y2 - diffx,
-      //   build.team.color.toFloatBits(),
-      //   x2 - diffy, y2 + diffx,
-      //   build.team.color.toFloatBits()
-      // );
+      Tmp.c1.set(this.team.color).add(0, 0, 0, -0.7);
+      Tmp.c2.set(build.team.color).add(0, 0, 0, -0.7);
+      Tmp.v1.trns(angle, 6);
+      gradientLine(this.x + Tmp.v1.x, this.y + Tmp.v1.y, build.x - Tmp.v1.x, build.y - Tmp.v1.y, Tmp.c1, Tmp.c2, 9);
+      Tmp.v1.trns(angle, 6, 5.25);
+      Tmp.v2.trns(angle + 90, 5.25, 6);
+      gradientLine(this.x + Tmp.v1.x, this.y + Tmp.v1.y, build.x + Tmp.v2.x, build.y + Tmp.v2.y, this.team.color, build.team.color, 1.25);
+      Tmp.v1.trns(angle, 6, -5.25);
+      Tmp.v2.trns(angle + 180, 6, 5.25);
+      gradientLine(this.x + Tmp.v1.x, this.y + Tmp.v1.y, build.x + Tmp.v2.x, build.y + Tmp.v2.y, this.team.color, build.team.color, 1.25);
 
     }
-    
+
   },
 
-  drawAcceptableItems(){
+  drawAcceptableItems() {
     if (this.acceptableItems.size == 0) return;
     var size = 8;
     var offsetx = 0;
-    var offsety = size*2;
-    for(var i = 0; i < this.acceptableItems.size; i++){
-      if (i%3 == 0 && i != 0){
-        offsety+=size
+    var offsety = size * 2;
+    for (var i = 0; i < this.acceptableItems.size; i++) {
+      if (i % 3 == 0 && i != 0) {
+        offsety += size
       }
-      offsetx = i%3*size - size
-      Draw.color(0,0,0,0.4);
-      Fill.square(this.x+offsetx,this.y+offsety,size/2);
+      offsetx = i % 3 * size - size
+      Draw.color(0, 0, 0, 0.4);
+      Fill.square(this.x + offsetx, this.y + offsety, size / 2);
       Draw.color();
-      Draw.rect(this.acceptableItems.get(i).icon(Cicon.small),this.x+offsetx,this.y+offsety,size,size);
+      Draw.rect(this.acceptableItems.get(i).icon(Cicon.small), this.x + offsetx, this.y + offsety, size, size);
     }
   },
 
@@ -235,6 +262,7 @@ transfer.buildType = () => extend(Building, {
     }
   },
   updateTile() {
+    this._buffer.update(this)
     this.validateLinks();
     if (!this._send) {
       this.dump(null);
@@ -259,9 +287,10 @@ transfer.buildType = () => extend(Building, {
   //в другой блок через нужное время
   transferItemTo(build, item, amount) {
     this.items.remove(item, amount);
-    Time.run(25, run(() => {
-      build.handleItemB(item, amount);
-    }));
+    this._buffer.accept(Angles.angle(this.x, this.y, build.x, build.y),build, item, amount);
+    // Time.run(25, run(() => {
+    //   build.handleItemB(item, amount);
+    // }));
     transferEffect.at(this.x, this.y, Angles.angle(this.x, this.y, build.x, build.y), this.team.color, [item.icon(Cicon.medium), build]);
     transferEffect2.at(this.x, this.y, 1.0);
   },
@@ -331,7 +360,7 @@ transfer.buildType = () => extend(Building, {
 
       table.background(Styles.black);
 
-      table.table(cons(t=>{
+      table.table(cons(t => {
         t.button("@transfer.accept", Styles.clearTogglet, run(() => this._send = false)).width(90).height(50);
         t.button("@transfer.send", Styles.clearTogglet, run(() => this._send = true)).width(90).height(50);
       }))
@@ -344,10 +373,10 @@ transfer.buildType = () => extend(Building, {
       var group = new ButtonGroup();
       group.setMinCheckCount(0);
 
-      cont.button(Icon.cancel,run(()=>this.acceptableItems.clear()));
+      cont.button(Icon.cancel, run(() => this.acceptableItems.clear()));
       for (var i = 1; i < items.size; i++) {
         if (items.get(i).isHidden()) continue;
-        this.addButton(cont, items.get(i),group);
+        this.addButton(cont, items.get(i), group);
         if (i % 6 == 5) cont.row();
       }
 
@@ -371,7 +400,7 @@ transfer.buildType = () => extend(Building, {
 
   },
 
-  addButton(cont, item,group) {
+  addButton(cont, item, group) {
     var button = cont.button(new TextureRegionDrawable(item.icon(Cicon.medium)), Styles.clearToggleTransi, 30, run(() => {
       //Vars.control.input.frag.config.hideConfig();
       this.addAcceptItem(item);
@@ -395,6 +424,7 @@ transfer.buildType = () => extend(Building, {
     for (var i = 0; i < this._links.size; i++) {
       write.i(this._links.get(i))
     }
+    this._buffer.write(write)
   },
 
   read(read, re) {
@@ -403,6 +433,7 @@ transfer.buildType = () => extend(Building, {
     for (var i = 0; i < size; i++) {
       this._links.add(read.i())
     }
+    this._buffer.read(read)
   }
 
 });
