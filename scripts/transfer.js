@@ -358,20 +358,20 @@ transfer.buildType = () => extend(Building, {
 
     try {
 
+      var group = new ButtonGroup();
+      group.setMinCheckCount(0);
+
       table.background(Styles.black);
 
       table.table(cons(t => {
-        t.button("@transfer.accept", Styles.clearTogglet, run(() => this._send = false)).width(90).height(50);
-        t.button("@transfer.send", Styles.clearTogglet, run(() => this._send = true)).width(90).height(50);
-      }))
+        t.button("@transfer.accept", Styles.clearTogglet, run(() => this._send = false)).width(90).height(50).group(group);
+        t.button("@transfer.send", Styles.clearTogglet, run(() => this._send = true)).width(90).height(50).group(group);
+      }));
       table.row();
 
       var items = Vars.content.items();
       var cont = new Table();
       cont.defaults().size(30);
-
-      var group = new ButtonGroup();
-      group.setMinCheckCount(0);
 
       cont.button(Icon.cancel, run(() => this.acceptableItems.clear()));
       for (var i = 1; i < items.size; i++) {
